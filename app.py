@@ -1,3 +1,4 @@
+# app.py (drop-in replacement)
 import os
 import re
 import json
@@ -8,17 +9,27 @@ from flask import Flask, render_template, request, redirect, url_for, send_file,
 from docx import Document
 import pdfplumber
 from dotenv import load_dotenv
-from openai import OpenAI  # ✅ use new SDK
-import nltk
-nltk.download('wordnet')
-nltk.download('omw-1.4')  # optional but recommended for lemmatization
 
+# -------------------------
+# New imports
+# -------------------------
+import numpy as np  # for cosine similarity of embeddings
+import nltk
+nltk.download('wordnet', quiet=True)
+nltk.download('omw-1.4', quiet=True)
 from nltk.stem import WordNetLemmatizer
+
+# OpenAI import (guarded)
+try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET", "devkey")
 GENERATED_DIR = Path("generated")
 GENERATED_DIR.mkdir(exist_ok=True)
 
@@ -26,38 +37,29 @@ GENERATED_DIR.mkdir(exist_ok=True)
 # OpenAI client setup
 # -------------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-lemmatizer = WordNetLemmatizer()
-
-if not OPENAI_API_KEY:
-    print("⚠️ No OpenAI API key found. Using fallback rule-based logic.")
-    client = None
-else:
-    from openai import OpenAI
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    
-    # -------------------------
-    # Test OpenAI API key
-    # -------------------------
+client = None
+if OPENAI_API_KEY and OpenAI is not None:
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": "Hello, test if API is working!"}]
-        )
-        print("✅ OpenAI API key is working! Sample response:")
-        print(response.choices[0].message.content)
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        # quick smoke test (non-fatal)
+        try:
+            _ = client.embeddings.create(model="text-embedding-3-small", input=["test"])
+            print("OpenAI embeddings available")
+        except Exception as e:
+            print("OpenAI test error (embeddings):", e)
+            # keep client as-is; we'll handle exceptions when calling
     except Exception as e:
-        print("❌ OpenAI test failed:", e)
-        print("Using fallback rule-based logic instead.")
+        print("OpenAI initialization failed:", e)
         client = None
-
-
+else:
+    print("No OpenAI key/client available - running in fallback mode.")
 
 # -------------------------
 # Helpers
 # -------------------------
+lemmatizer = WordNetLemmatizer()
 
 def extract_text_from_pdf(file_path):
-    """Extract text from PDF using pdfplumber."""
     text = ""
     try:
         with pdfplumber.open(file_path) as pdf:
@@ -68,9 +70,7 @@ def extract_text_from_pdf(file_path):
         print("pdfplumber error:", e)
     return text.strip()
 
-
 def extract_text_from_docx(file_path):
-    """Extract text from DOCX file."""
     text = ""
     try:
         doc = Document(file_path)
@@ -80,58 +80,113 @@ def extract_text_from_docx(file_path):
         print("docx extraction error:", e)
     return text.strip()
 
-
 STOPWORDS = {
     "and","or","the","a","an","to","for","in","on","with","by","of","is","are",
     "that","this","as","be","has","have","at","from","will","it","its","i","my"
 }
 
 def tokenize(text):
-    """Lowercase, remove non-alphanumeric, lemmatize, remove stopwords, remove 1-letter words."""
     tokens = re.findall(r'\b\w+\b', (text or "").lower())
     tokens = [lemmatizer.lemmatize(t) for t in tokens if t not in STOPWORDS and len(t) > 1]
     return tokens
 
+# -------------------------
+# New: embedding helpers (uses OpenAI embeddings)
+# -------------------------
+def get_embedding(text, model_name="text-embedding-3-small"):
+    """
+    Return embedding vector using OpenAI embeddings (if client exists).
+    Raises Exception if client is None or API fails.
+    """
+    if not client:
+        raise RuntimeError("OpenAI client not available")
+    # Normalize
+    text = (text or "").replace("\n", " ")
+    resp = client.embeddings.create(model=model_name, input=[text])
+    emb = resp.data[0].embedding
+    return np.array(emb, dtype=float)
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray):
+    if a is None or b is None:
+        return 0.0
+    denom = (np.linalg.norm(a) * np.linalg.norm(b))
+    if denom == 0:
+        return 0.0
+    return float(np.dot(a, b) / denom)
+
+# -------------------------
+# compute_match_score changes
+# -------------------------
 def compute_match_score(resume_text, job_desc):
-    """Compute keyword match score between resume and job description using lemmatized tokens."""
+    """
+    Compute match score and matched/missing keywords.
+    - If OpenAI client is available, compute semantic similarity using embeddings for a numeric score.
+    - Also compute token overlap (lemmatized) to supply matched_keywords and missing_keywords lists.
+    Returns: (score_percent(float), matched_keywords(list), missing_keywords(list))
+    ### CHANGE: switched to embeddings-based numeric score when possible
+    """
+    # token overlap for matched/missing lists (keeps previous behavior)
     job_tokens = set(tokenize(job_desc))
     resume_tokens = set(tokenize(resume_text))
-    common = job_tokens.intersection(resume_tokens)
+    common = sorted(list(job_tokens.intersection(resume_tokens)))
+    missing = sorted(list(job_tokens - resume_tokens))
 
+    # Try semantic score using embeddings when available
+    if client:
+        try:
+            job_emb = get_embedding(job_desc)
+            resume_emb = get_embedding(resume_text)
+            sim = cosine_similarity(resume_emb, job_emb)
+            score = round(sim * 100.0, 2)
+            return score, common, missing
+        except Exception as e:
+            print("Embedding-based score failed:", e)
+            # fall through to keyword score
+
+    # Fallback: keyword ratio score (previous logic)
     if not job_tokens:
-        score = 0
-    else:
-        score = (len(common) / len(job_tokens)) * 100
+        return 0.0, common, missing
+    score = (len(common) / len(job_tokens)) * 100.0
+    return round(score, 2), common, missing
 
-    # Debug prints (remove in production)
-    print("Job tokens:", job_tokens)
-    print("Resume tokens:", resume_tokens)
-    print("Common tokens:", common)
-
-    return round(score, 1), sorted(list(common)), sorted(list(job_tokens - common))
-
-
+# -------------------------
+# call_openai_optimize changes
+# -------------------------
 def call_openai_optimize(resume_text, job_desc):
-    """Call OpenAI API to optimize resume."""
+    """
+    Ask OpenAI chat model to return an optimized resume and metadata as JSON.
+    Always returns a dictionary with keys:
+        - optimized_resume
+        - suggested_improvements
+        - roadmap
+        - matched_keywords
+    """
+    # If OpenAI client is not available, return the original resume but keep keys
     if not client:
-        # Fallback: simple rule-based improvements
-        improved = resume_text.replace("responsible for", "implemented").replace("worked on", "implemented")
         return {
-            "optimized_resume": improved,
-            "suggested_improvements": ["Replace weak verbs with active verbs", "Add measurable outcomes (percent, numbers)"],
-            "roadmap": [
-                {"step": "Learn missing skill X", "time_estimate": "2 weeks"},
-                {"step": "Build a project", "time_estimate": "2-3 weeks"},
-                {"step": "Practice interviews & update resume", "time_estimate": "1 week"}
-            ]
+            "optimized_resume": resume_text,  # keeps template happy
+            "suggested_improvements": [],
+            "roadmap": [],
+            "matched_keywords": sorted(list(set(tokenize(resume_text)).intersection(set(tokenize(job_desc)))))
         }
 
+    # System prompt for AI rewrite
     system_prompt = (
-        "You are an expert career coach and resume writer. "
-        "You will receive a candidate resume (raw text) and a target job description. "
-        "Produce a JSON object ONLY with keys: optimized_resume (string), suggested_improvements (array of short strings), "
-        "roadmap (array of objects with keys step and time_estimate). Keep outputs concise."
-    )
+    "You are an expert career coach and professional resume writer. "
+    "You will receive a candidate's raw resume text and a target job description. "
+    "Your task is to COMPLETELY REWRITE the resume from scratch, tailored specifically to the job description. "
+    "Do NOT reuse or repeat sentences verbatim from the input resume. "
+    "Instead, use professional resume formatting, strong action verbs, and measurable achievements. "
+    "Incorporate relevant skills and keywords from the job description naturally. "
+    "Highlight achievements using numbers, percentages, or outcomes wherever possible. "
+    "Always return your output as valid JSON ONLY with the following keys:\n"
+    "1. optimized_resume (string) → the fully rewritten professional resume.\n"
+    "2. suggested_improvements (array of short strings) → list of resume writing suggestions.\n"
+    "3. roadmap (array of objects with keys: step, time_estimate) → career improvement plan.\n"
+    "4. matched_keywords (array of strings) → keywords from the job description found in the rewritten resume.\n\n"
+    "Return JSON only. Do not include explanations or commentary outside of JSON."
+)
+
 
     user_prompt = f"Resume:\n{resume_text}\n\nTarget job description:\n{job_desc}\n\nReturn JSON ONLY."
 
@@ -142,70 +197,69 @@ def call_openai_optimize(resume_text, job_desc):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.2,
-            max_tokens=800
+            temperature=0.5,
+            max_tokens=1500
         )
 
         content = resp.choices[0].message.content.strip()
 
-        # Try parse JSON
+        # Parse JSON robustly
         try:
             data = json.loads(content)
         except Exception:
-            idx = content.find('{')
-            if idx != -1:
-                data = json.loads(content[idx:])
+            start = content.find('{')
+            end = content.rfind('}')
+            if start != -1 and end != -1:
+                data = json.loads(content[start:end+1])
             else:
-                raise
+                data = {}
+
+        # Ensure all required keys exist
+        data.setdefault("optimized_resume", resume_text)
+        data.setdefault("suggested_improvements", [])
+        data.setdefault("roadmap", [])
+        if "matched_keywords" not in data:
+            data["matched_keywords"] = sorted(list(set(tokenize(resume_text)).intersection(set(tokenize(job_desc)))))
+
         return data
+
     except Exception as e:
-        print("⚠️ OpenAI failed or quota exceeded:", e)
-        # fallback logic
-        improved = resume_text.replace("responsible for", "implemented").replace("worked on", "implemented")
+        print("OpenAI chat failed:", e)
+        # fallback: just return the original text with keys (no weak "implemented" replacements)
         return {
-            "optimized_resume": improved,
-            "suggested_improvements": ["(Fallback) Manually review verbs & metrics."],
-            "roadmap": [
-                {"step": "Learn missing skill X", "time_estimate": "2 weeks"},
-                {"step": "Build a project", "time_estimate": "2-3 weeks"},
-                {"step": "Practice interviews & update resume", "time_estimate": "1 week"}
-            ]
+            "optimized_resume": resume_text,
+            "suggested_improvements": ["(Fallback) AI optimization failed; review manually."],
+            "roadmap": [{"step": "Manual review", "time_estimate": "1 week"}],
+            "matched_keywords": sorted(list(set(tokenize(resume_text)).intersection(set(tokenize(job_desc)))))
         }
 
 
-
 def save_docx_from_text(text, filename_path):
-    """Save plain text into a DOCX file."""
     doc = Document()
     for line in text.splitlines():
         doc.add_paragraph(line)
     doc.save(filename_path)
 
-
 # -------------------------
-# Routes
+# Routes (mostly unchanged)
 # -------------------------
 @app.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
 
-
 @app.route("/analyze", methods=["POST"])
 def analyze():
     job_desc = request.form.get("job_desc", "").strip()
-    job_desc = re.sub(r'\s+', ' ', job_desc)  # remove extra spaces/newlines
-
+    job_desc = re.sub(r'\s+', ' ', job_desc)
     uploaded = request.files.get("resume_file")
 
     if not uploaded or uploaded.filename == "":
         flash("Please upload a resume PDF or DOCX file.")
         return redirect(url_for("index"))
 
-    # Save temp file
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(uploaded.filename)[1] or ".pdf")
     uploaded.save(tmp_path)
 
-    # Extract text
     ext = uploaded.filename.lower()
     if ext.endswith(".pdf"):
         resume_text = extract_text_from_pdf(tmp_path)
@@ -221,23 +275,26 @@ def analyze():
     if not resume_text:
         resume_text = "(No text could be extracted from the uploaded file.)"
 
-    # Compute scores
+    # Compute before score (embedding if possible)
     before_score, matched_keywords, missing_keywords = compute_match_score(resume_text, job_desc)
 
-    # AI optimization
+    # Ask OpenAI to optimize resume (or fallback)
     ai_result = call_openai_optimize(resume_text, job_desc)
     optimized_resume = ai_result.get("optimized_resume", resume_text)
     suggested_improvements = ai_result.get("suggested_improvements", [])
     roadmap = ai_result.get("roadmap", [])
+    # prefer matched keywords from model if provided
+    matched_from_model = ai_result.get("matched_keywords", matched_keywords)
 
-    after_score, matched_after, missing_after = compute_match_score(optimized_resume, job_desc)
+    # Compute after score (embedding if possible)
+    after_score, _, _ = compute_match_score(optimized_resume, job_desc)
 
-    # Save optimized resume
+    # Save optimized resume as .docx
     file_id = uuid.uuid4().hex
     out_path = GENERATED_DIR / f"{file_id}.docx"
     save_docx_from_text(optimized_resume, out_path)
 
-    # Remove temp file
+    # cleanup
     try:
         os.close(tmp_fd)
         os.remove(tmp_path)
@@ -247,14 +304,13 @@ def analyze():
     return render_template("results.html",
                            before_score=before_score,
                            after_score=after_score,
-                           matched_keywords=matched_keywords,
+                           matched_keywords=matched_from_model or matched_keywords,
                            missing_keywords=missing_keywords,
                            suggested_improvements=suggested_improvements,
                            roadmap=roadmap,
                            optimized_resume=optimized_resume,
                            download_id=file_id
                            )
-
 
 @app.route("/download/optimized/<file_id>", methods=["GET"])
 def download_optimized(file_id):
@@ -263,7 +319,6 @@ def download_optimized(file_id):
         flash("File not found.")
         return redirect(url_for("index"))
     return send_file(path, as_attachment=True, download_name="Optimized_Resume.docx")
-
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

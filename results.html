@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-3">
+  <a class="btn btn-secondary" href="{{ url_for('index') }}">&larr; Back</a>
+</div>
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h5>Match Score</h5>
+        <p>Before: <strong>{{ before_score }}%</strong></p>
+        <p>After: <strong>{{ after_score }}%</strong></p>
+        <a class="btn btn-outline-success" href="{{ url_for('download_optimized', file_id=download_id) }}">Download Optimized Resume</a>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <h5>Suggested Improvements</h5>
+        <ul>
+          {% for s in suggested_improvements %}
+            <li>{{ s }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h5>Matched Keywords (from job description)</h5>
+        {% if matched_keywords %}
+          <p class="small text-muted">{{ matched_keywords|join(', ') }}</p>
+        {% else %}
+          <p class="text-muted small">No keywords matched.</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <div class="col-md-6">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h5>Personalized Growth Roadmap</h5>
+        {% if roadmap %}
+          <ol>
+          {% for step in roadmap %}
+            <li>
+              {% if step.step %} {{ step.step }} {% else %} {{ step.get('task', '') }} {% endif %}
+              <span class="badge bg-secondary ms-2">{{ step.time_estimate if step.time_estimate is defined else step.get('time','') }}</span>
+            </li>
+          {% endfor %}
+          </ol>
+        {% else %}
+          <p class="text-muted">No roadmap generated.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h5>Optimized Resume (preview)</h5>
+        <pre style="white-space:pre-wrap; font-family:inherit;">{{ optimized_resume }}</pre>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

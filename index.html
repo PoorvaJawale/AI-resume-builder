@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center hero">
+  <div class="col-lg-8">
+    <div class="card p-4">
+      <h3 class="mb-2">Upload Resume & Target Job</h3>
+      <p class="small-muted mb-3">Get a job-specific resume optimization, match score and personalized roadmap.</p>
+
+      <form action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data" id="uploadForm">
+        <div class="mb-3">
+          <label class="form-label">Target Job Description</label>
+          <textarea class="form-control" name="job_desc" rows="5" placeholder="Paste the job description or key skills here..." required></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Upload Resume (PDF or DOCX)</label>
+          <input class="form-control" type="file" name="resume_file" accept=".pdf,.docx" required>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button class="btn btn-primary btn-lg" type="submit">Analyze & Optimize</button>
+        </div>
+      </form>
+
+      <div class="mt-3 small text-muted">
+        Tip: For best results paste the full job post. If model quota is exhausted the app will use a fallback optimizer.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

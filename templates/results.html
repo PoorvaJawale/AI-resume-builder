@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main-container">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <a class="btn btn-outline-secondary" href="{{ url_for('index') }}">
+      <i class="fas fa-arrow-left me-2"></i>Back to Upload
+    </a>
+    <div class="text-end">
+      <h4 class="mb-0">Resume Analysis Complete</h4>
+      <small class="text-muted">AI-powered optimization results</small>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Match Scores -->
+    <div class="col-lg-4 mb-4">
+      <div class="card">
+        <div class="card-body text-center p-4">
+          <h5 class="card-title mb-2">
+            <i class="fas fa-chart-line me-2 text-primary"></i>Match Score Analysis
+          </h5>
+          
+          <div class="row">
+            <div class="col-6">
+              <div class="score-circle score-before">{{ before_score }}%</div>
+              <h6 class="fw-semibold">Before</h6>
+              <small class="text-muted">Original Resume</small>
+            </div>
+            <div class="col-6">
+              <div class="score-circle score-after">{{ after_score }}%</div>
+              <h6 class="fw-semibold">After</h6>
+              <small class="text-muted">Optimized Resume</small>
+            </div>
+          </div>
+
+          <hr class="my-3"/>
+          <h6 class="fw-semibold mb-2"><i class="fas fa-clipboard-check me-2 text-success"></i>ATS Score</h6>
+          <div class="row small">
+            <div class="col-6">
+              <div class="text-muted">Before</div>
+              <div class="fw-bold">{{ ats_before }}%</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted">After</div>
+              <div class="fw-bold">{{ ats_after }}%</div>
+            </div>
+          </div>
+          
+          <div class="mt-4">
+            <div class="d-grid gap-2">
+              <a class="btn btn-success btn-lg" href="{{ url_for('download_optimized', file_id=download_id) }}">
+                <i class="fas fa-file-word me-2"></i>Download DOCX
+              </a>
+              <a class="btn btn-primary btn-lg" href="{{ url_for('download_pdf', file_id=download_id) }}">
+                <i class="fas fa-file-pdf me-2"></i>Download PDF
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keywords & Improvements -->
+    <div class="col-lg-8 mb-4">
+      <div class="row">
+        <!-- Matched Keywords -->
+        <div class="col-md-6 mb-4">
+          <div class="card h-100">
+            <div class="card-body">
+              <h5 class="card-title">
+                <i class="fas fa-check-circle me-2 text-success"></i>Matched Keywords
+              </h5>
+              {% if matched_keywords %}
+                <div class="mb-3">
+                  {% for keyword in matched_keywords[:10] %}
+                    <span class="keyword-tag">{{ keyword }}</span>
+                  {% endfor %}
+                  {% if matched_keywords|length > 10 %}
+                    <span class="keyword-tag">+{{ matched_keywords|length - 10 }} more</span>
+                  {% endif %}
+                </div>
+                <small class="text-success">
+                  <i class="fas fa-check me-1"></i>{{ matched_keywords|length }} keywords matched
+                </small>
+              {% else %}
+                <p class="text-muted">No keywords matched.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Missing Keywords -->
+        <div class="col-md-6 mb-4">
+          <div class="card h-100">
+            <div class="card-body">
+              <h5 class="card-title">
+                <i class="fas fa-exclamation-triangle me-2 text-warning"></i>Missing Keywords
+              </h5>
+              {% if missing_keywords %}
+                <div class="mb-3">
+                  {% for keyword in missing_keywords[:10] %}
+                    <span class="keyword-tag" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border-color: rgba(245, 158, 11, 0.2);">{{ keyword }}</span>
+                  {% endfor %}
+                  {% if missing_keywords|length > 10 %}
+                    <span class="keyword-tag" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border-color: rgba(245, 158, 11, 0.2);">+{{ missing_keywords|length - 10 }} more</span>
+                  {% endif %}
+                </div>
+                <small class="text-warning">
+                  <i class="fas fa-info me-1"></i>{{ missing_keywords|length }} keywords to add
+                </small>
+              {% else %}
+                <p class="text-success">
+                  <i class="fas fa-check me-1"></i>All important keywords are covered!
+                </p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Suggested Improvements -->
+    <div class="col-lg-6 mb-4">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">
+            <i class="fas fa-lightbulb me-2 text-warning"></i>Suggested Improvements
+          </h5>
+          {% if ats_after_issues %}
+          <div class="small text-muted mb-2">ATS Suggestions</div>
+          <ul class="small">
+            {% for i in ats_after_issues %}
+              <li>{{ i }}</li>
+            {% endfor %}
+          </ul>
+          <hr/>
+          {% endif %}
+          {% if suggested_improvements %}
+            {% for improvement in suggested_improvements %}
+              <div class="improvement-item">
+                <i class="fas fa-arrow-right me-2 text-success"></i>{{ improvement }}
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-muted">No specific improvements suggested.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Career Roadmap -->
+    <div class="col-lg-6 mb-4">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">
+            <i class="fas fa-route me-2 text-primary"></i>Career Roadmap
+          </h5>
+          {% if roadmap %}
+            {% for step in roadmap %}
+              <div class="roadmap-step">
+                <i class="fas fa-map-marker-alt me-2 text-primary"></i>{{ step }}
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-muted">No roadmap generated.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Optimized Resume Preview -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">
+            <i class="fas fa-eye me-2 text-info"></i>Optimized Resume Preview
+          </h5>
+          <div class="bg-light p-4 rounded-3" style="max-height: 400px; overflow-y: auto;">
+            <pre style="white-space: pre-wrap; font-family: 'Inter', sans-serif; font-size: 0.9rem; line-height: 1.6; margin: 0;">{{ optimized_resume }}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

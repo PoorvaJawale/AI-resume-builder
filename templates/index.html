@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="main-container">
+  <div class="hero-section">
+    <h1 class="hero-title">Optimize Your Resume with AI</h1>
+    <p class="hero-subtitle">Get personalized resume improvements, matching scores, and career roadmaps tailored to your target job</p>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-10 mx-auto">
+      <div class="card">
+        <div class="card-body p-5">
+          <h3 class="mb-4 text-center">
+            <i class="fas fa-upload me-2 text-primary"></i>Upload Your Resume
+          </h3>
+          
+          <form action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data" id="uploadForm">
+            <div class="mb-4">
+              <label class="form-label fw-semibold">
+                <i class="fas fa-briefcase me-2"></i>Target Job Description
+              </label>
+              <textarea 
+                class="form-control" 
+                name="job_desc" 
+                rows="6" 
+                placeholder="Paste the complete job description here. Include requirements, responsibilities, and preferred qualifications for best results..." 
+                required
+              ></textarea>
+              <div class="form-text">The more detailed the job description, the better our AI can optimize your resume.</div>
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label fw-semibold">
+                <i class="fas fa-file-upload me-2"></i>Upload Resume
+              </label>
+              <input 
+                class="form-control" 
+                type="file" 
+                name="resume_file" 
+                accept=".pdf,.docx" 
+                required
+              >
+              <div class="form-text">Supported formats: PDF, DOCX (Maximum 10MB)</div>
+            </div>
+
+            <div class="mb-5">
+              <label class="form-label fw-semibold mb-4">
+                <i class="fas fa-palette me-2"></i>Choose Resume Template
+              </label>
+              <div class="row g-4">
+                {% for template_id, template in templates.items() %}
+                <div class="col-md-6 col-lg-4">
+                  <div class="template-card" data-template="{{ template_id }}">
+                    <input type="radio" name="template" value="{{ template_id }}" class="d-none" 
+                           {% if template_id == 'modern' %}checked{% endif %}>
+                    <div class="template-preview" style="background: linear-gradient(45deg, {{ template.colors.primary }}, {{ template.colors.accent }});">
+                      <i class="fas fa-file-alt text-white"></i>
+                    </div>
+                    <h6 class="fw-semibold mb-2">{{ template.name }}</h6>
+                    <p class="small text-muted mb-2">{{ template.description }}</p>
+                    <small class="text-primary fw-medium">{{ template.layout|title }} Layout</small>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="d-grid">
+              <button class="btn btn-primary btn-lg" type="submit">
+                <i class="fas fa-magic me-2"></i>Analyze & Optimize Resume
+              </button>
+            </div>
+          </form>
+
+          <div class="mt-5 p-4 bg-light rounded-3">
+            <h6 class="fw-semibold mb-3 text-center">
+              <i class="fas fa-info-circle me-2 text-primary"></i>How it works:
+            </h6>
+            <div class="row g-3">
+              <div class="col-md-3 text-center">
+                <div class="p-3">
+                  <i class="fas fa-upload fa-2x text-primary mb-2"></i>
+                  <h6 class="fw-semibold">Upload</h6>
+                  <small class="text-muted">Upload your resume and job description</small>
+                </div>
+              </div>
+              <div class="col-md-3 text-center">
+                <div class="p-3">
+                  <i class="fas fa-chart-line fa-2x text-success mb-2"></i>
+                  <h6 class="fw-semibold">Analyze</h6>
+                  <small class="text-muted">AI calculates matching score using cosine similarity</small>
+                </div>
+              </div>
+              <div class="col-md-3 text-center">
+                <div class="p-3">
+                  <i class="fas fa-magic fa-2x text-warning mb-2"></i>
+                  <h6 class="fw-semibold">Optimize</h6>
+                  <small class="text-muted">AI rewrites your resume to achieve 100% match</small>
+                </div>
+              </div>
+              <div class="col-md-3 text-center">
+                <div class="p-3">
+                  <i class="fas fa-download fa-2x text-info mb-2"></i>
+                  <h6 class="fw-semibold">Download</h6>
+                  <small class="text-muted">Get your professionally formatted resume</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

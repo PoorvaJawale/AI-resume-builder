@@ -48,17 +48,17 @@ To set up the AI Resume Builder locally, follow these steps:
 
 5. Open your browser and navigate to http://127.0.0.1:5000 to access the AI Resume Builder.
 
-###Usage
+### Usage
 1. Launch the application and select a resume template.
 2. Input your personal details, including name, contact information, education, skills, and work experience.
 3. Use the AI-powered suggestions to enhance your resume content.
 4. Preview your resume in real-time.
 5. Once satisfied, download your resume in the desired format.
 
-###AI Integration
+### AI Integration
 The AI functionalities are powered by Ollama's GPT-OSS-20B model. This model assists in generating and refining resume content, ensuring that each resume is tailored to highlight the user's strengths and experiences effectively.
 
-###Contributing
+### Contributing
 Contributions to the AI Resume Builder project are welcome. To contribute:
 
 1. Fork the repository.
@@ -67,5 +67,5 @@ Contributions to the AI Resume Builder project are welcome. To contribute:
 4. Push to the branch (git push origin feature-branch).
 5. Create a new Pull Request.
 
-###License
+### License
 This project is licensed under the MIT License 
